@@ -1,0 +1,15 @@
+{
+  "name": "maxpolio",
+  "version": "0.1.0",
+  "description": "Auto-journal Claude Code sessions into a categorized technical blog + strength report, output as an Obsidian-compatible vault.",
+  "type": "module",
+  "bin": {
+    "maxpolio": "./bin/maxpolio.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
