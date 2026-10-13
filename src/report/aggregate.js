@@ -18,18 +18,37 @@ function walkMarkdownFiles(dir) {
   return results;
 }
 
-function parseFrontmatter(filePath) {
+function readNote(filePath) {
   const raw = fs.readFileSync(filePath, "utf8");
   if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) return null;
   const end = raw.indexOf("\n---", 4);
   if (end === -1) return null;
   const yamlBlock = raw.slice(4, end);
   try {
-    return yaml.load(yamlBlock);
+    const frontmatter = yaml.load(yamlBlock);
+    if (!frontmatter) return null;
+    const bodyStart = raw.indexOf("\n", end + 1);
+    return { frontmatter, body: bodyStart === -1 ? "" : raw.slice(bodyStart + 1).trim() };
   } catch (err) {
     logger.warn("failed to parse frontmatter", { error: err.message, filePath });
     return null;
   }
+}
+
+function parseFrontmatter(filePath) {
+  return readNote(filePath)?.frontmatter ?? null;
+}
+
+/**
+ * Loads every journal note under `outputDir` with its frontmatter and body.
+ */
+export function loadJournalNotes(outputDir) {
+  const notes = [];
+  for (const filePath of walkMarkdownFiles(outputDir)) {
+    const note = readNote(filePath);
+    if (note) notes.push({ filePath, ...note });
+  }
+  return notes;
 }
 
 function bump(map, key) {

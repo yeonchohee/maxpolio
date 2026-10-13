@@ -7,6 +7,11 @@ const DEFAULT_CONFIG = {
   // Runs through the locally logged-in Claude Code CLI (subscription usage,
   // no separate API key). See src/lib/claude-cli.js.
   model: "sonnet",
+  // A session that is still open gets (re)journaled once it has been quiet
+  // for this long and its transcript has grown since the last run.
+  idleMinutes: 120,
+  // How often the scheduled task runs `maxpolio sync`.
+  syncIntervalMinutes: 30,
 };
 
 export function loadConfig() {

@@ -3,6 +3,9 @@ import { logger } from "./logger.js";
 import { redactSecrets } from "./redact.js";
 
 const TIME_BUFFER_MS = 5 * 60 * 1000; // 5 minutes slack on both ends
+// Past this age the working tree no longer says anything about the session:
+// a catch-up run days later would attribute today's edits to it.
+const UNCOMMITTED_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -54,10 +57,12 @@ export function correlateGitActivity(cwd, startTime, endTime) {
   }
 
   let uncommittedDiff = "";
-  try {
-    uncommittedDiff = git(cwd, ["diff", "HEAD"]);
-  } catch (err) {
-    logger.warn("git diff failed", { error: err.message, cwd });
+  if (Date.now() - (endTime?.getTime() ?? Date.now()) <= UNCOMMITTED_MAX_AGE_MS) {
+    try {
+      uncommittedDiff = git(cwd, ["diff", "HEAD"]);
+    } catch (err) {
+      logger.warn("git diff failed", { error: err.message, cwd });
+    }
   }
 
   return { repoName, commitLog: redactSecrets(commits), uncommittedDiff: redactSecrets(uncommittedDiff) };

@@ -5,19 +5,54 @@ import { truncateLogMiddle } from "./transcript-parser.js";
 const MAX_BUFFER = 20 * 1024 * 1024;
 const MAX_LOG_CHARS = 120000;
 const MAX_DIFF_CHARS = 40000;
+const TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Runs one non-interactive `claude -p` call with tools disabled (--restricted)
  * and a custom system prompt, using whatever Claude Code account is already
  * logged in on this machine (subscription usage, not a metered API key).
+ * --no-session-persistence keeps these calls from leaving transcripts of
+ * their own in ~/.claude/projects, which the sync scan would then see.
  */
 function runClaudePrint({ systemPrompt, input, jsonSchema, model }) {
-  const args = ["-p", "--restricted", "--output-format", "json", "--model", model, "--system-prompt", systemPrompt];
+  const args = [
+    "-p",
+    "--restricted",
+    "--no-session-persistence",
+    "--output-format",
+    "json",
+    "--model",
+    model,
+    "--system-prompt",
+    systemPrompt,
+  ];
   if (jsonSchema) {
     args.push("--json-schema", JSON.stringify(jsonSchema));
   }
 
-  const raw = execFileSync("claude", args, { input, encoding: "utf8", maxBuffer: MAX_BUFFER });
+  let raw;
+  try {
+    raw = execFileSync("claude", args, {
+      input,
+      encoding: "utf8",
+      maxBuffer: MAX_BUFFER,
+      timeout: TIMEOUT_MS,
+      windowsHide: true,
+    });
+  } catch (err) {
+    // The default message is just the (huge) command line; the actual reason
+    // lives in stdout (JSON with is_error/result) or stderr.
+    const stdout = (err.stdout ?? "").toString().trim();
+    const stderr = (err.stderr ?? "").toString().trim();
+    let reason = stderr;
+    try {
+      const out = JSON.parse(stdout);
+      reason = [out.subtype, out.result, stderr].filter(Boolean).join(" | ");
+    } catch {
+      reason = [stdout.slice(0, 2000), stderr].filter(Boolean).join(" | ");
+    }
+    throw new Error(`claude CLI exited with code ${err.status ?? err.code}: ${reason || "(no output)"}`);
+  }
 
   let parsed;
   try {
@@ -182,4 +217,17 @@ export function generateText({ systemPrompt, input, model }) {
   const result = runClaudePrint({ systemPrompt, input, model });
   logger.info("claude-cli text usage", { usage: result.usage, cost_usd: result.total_cost_usd });
   return result.result;
+}
+
+/**
+ * Schema-constrained generation for callers that bring their own prompt and
+ * schema (the resume export).
+ */
+export function generateStructured({ systemPrompt, input, jsonSchema, model }) {
+  const result = runClaudePrint({ systemPrompt, input, jsonSchema, model });
+  if (!result.structured_output) {
+    throw new Error("claude CLI returned no structured_output");
+  }
+  logger.info("claude-cli structured usage", { usage: result.usage, cost_usd: result.total_cost_usd });
+  return result.structured_output;
 }
