@@ -15,8 +15,11 @@ function slugify(name) {
   );
 }
 
+// Local date, so a session that ends at 08:00 KST isn't filed under the
+// previous (UTC) day.
 function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function uniquePath(dir, slug) {
@@ -49,7 +52,8 @@ export function saveJournalEntry({ outputDir, classification, overview, parts, s
   const titleSlug = slugify(classification.title ?? sessionId.slice(0, 8));
   const dateStr = isoDate(date ?? new Date());
 
-  const mainFilePath = uniquePath(dir, titleSlug);
+  // Date prefix makes new notes easy to spot and sorts the folder by date.
+  const mainFilePath = uniquePath(dir, `${dateStr} ${titleSlug}`);
   const mainBaseName = path.basename(mainFilePath, ".md");
 
   const baseFrontmatter = {
@@ -66,7 +70,7 @@ export function saveJournalEntry({ outputDir, classification, overview, parts, s
 
   for (const [i, part] of (parts ?? []).entries()) {
     const partSlug = slugify(part.heading);
-    const partFilePath = uniquePath(dir, partSlug);
+    const partFilePath = uniquePath(dir, `${dateStr} ${partSlug}`);
     const partBaseName = path.basename(partFilePath, ".md");
 
     overviewBody = overviewBody.split(`[[PART:${i}]]`).join(`[[${partBaseName}|${part.heading}]]`);
