@@ -9,6 +9,7 @@ import { MAXPOLIO_HOME, SYNC_LAUNCHER_PATH, SYNC_TASK_NAME } from "../src/lib/pa
 import { runSync } from "../src/sync.js";
 import { generateStrengthReport } from "../src/report/strength-report.js";
 import { generateResumeExport } from "../src/report/resume-export.js";
+import { generateBlogExport, listBlogPosts } from "../src/report/blog-export.js";
 import { runPipeline } from "../src/pipeline.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -124,6 +125,39 @@ async function resume() {
   }
 }
 
+function blog(args) {
+  const all = args.includes("--all");
+  const query = args.filter((a) => a !== "--all").join(" ").trim();
+
+  if (!all && !query) {
+    const posts = listBlogPosts();
+    if (posts.length === 0) {
+      console.log("저널 항목이 아직 없어.");
+      return;
+    }
+    console.log("블로그 초안으로 뽑을 수 있는 글 (최신순):\n");
+    for (const p of posts) {
+      const parts = p.partCount > 0 ? ` (+곁가지 ${p.partCount}개 포함)` : "";
+      console.log(`  ${p.date ?? "날짜 없음"}  [${p.category ?? "-"}] ${p.title}${parts}`);
+    }
+    console.log("\n`maxpolio blog <제목 일부>` 또는 `maxpolio blog --all`로 초안을 만들어.");
+    return;
+  }
+
+  const drafts = generateBlogExport({ query, all });
+  if (drafts.length === 0) {
+    console.log(`"${query}"에 해당하는 저널 글이 없어. \`maxpolio blog\`로 목록을 확인해봐.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`티스토리 초안 ${drafts.length}개 생성 완료:`);
+  for (const d of drafts) {
+    const review = d.findingCount > 0 ? `  ← 확인할 주소/IP/이메일 ${d.findingCount}개` : "";
+    console.log(`  ${d.filePath}${review}`);
+  }
+  console.log("티스토리 글쓰기에서 에디터를 '마크다운' 모드로 바꾸고 본문을 붙여넣어. 내부 정보는 올리기 전에 직접 확인해줘.");
+}
+
 async function testSession(transcriptPath, cwd) {
   if (!transcriptPath) {
     console.error("사용법: maxpolio test-session <transcript_path> [cwd]");
@@ -147,6 +181,8 @@ function printHelp() {
   maxpolio sync                    종료된 세션 + 한동안 조용한 열린 세션을 저널링 (스케줄러가 호출)
   maxpolio report                  누적 저널로 강점 리포트 생성
   maxpolio resume                  누적 저널로 잡코리아/원티드 이력서 붙여넣기용 초안 생성
+  maxpolio blog                    티스토리 초안으로 뽑을 수 있는 저널 글 목록
+  maxpolio blog <제목 일부>|--all   저널 글을 티스토리 마크다운 모드 붙여넣기용 초안으로 변환
   maxpolio test-session <path> [cwd]  transcript JSONL 하나로 파이프라인 수동 테스트 (동기 실행, 결과 출력)
   maxpolio config                  현재 설정 출력
 `);
@@ -166,6 +202,9 @@ switch (command) {
     break;
   case "resume":
     await resume();
+    break;
+  case "blog":
+    blog(args);
     break;
   case "test-session":
     await testSession(args[0], args[1]);

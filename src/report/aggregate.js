@@ -51,6 +51,14 @@ export function loadJournalNotes(outputDir) {
   return notes;
 }
 
+// Frontmatter dates come back from YAML as a string or a Date depending on
+// how they were quoted; normalizes both to YYYY-MM-DD.
+export function toDateStr(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
 function bump(map, key) {
   if (!key) return;
   map.set(key, (map.get(key) ?? 0) + 1);

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { loadJournalNotes } from "./aggregate.js";
+import { loadJournalNotes, toDateStr } from "./aggregate.js";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { generateStructured, generateText } from "../lib/claude-cli.js";
@@ -97,12 +97,6 @@ function groupByProject(notes) {
     add(repoKey ?? fm.category ?? "기타", note);
   }
   return projects;
-}
-
-function toDateStr(value) {
-  if (!value) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
 function periodOf(notes) {
