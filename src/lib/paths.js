@@ -3,8 +3,8 @@ import path from "node:path";
 
 export const MAXPOLIO_HOME = path.join(os.homedir(), ".maxpolio");
 export const CONFIG_PATH = path.join(MAXPOLIO_HOME, "config.json");
-export const CATEGORIES_PATH = path.join(MAXPOLIO_HOME, "categories.json");
 export const STATE_PATH = path.join(MAXPOLIO_HOME, "state.json");
+export const PROJECTS_PATH = path.join(MAXPOLIO_HOME, "projects.json");
 export const QUEUE_DIR = path.join(MAXPOLIO_HOME, "queue");
 export const LOCK_PATH = path.join(MAXPOLIO_HOME, "sync.lock");
 export const SYNC_LAUNCHER_PATH = path.join(MAXPOLIO_HOME, "sync.vbs");

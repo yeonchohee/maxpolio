@@ -18,7 +18,7 @@ function buildDataviewBlock() {
     "",
     "```dataview",
     "TABLE length(rows) as 건수",
-    'FROM "" ',
+    'FROM "journal"',
     "WHERE category",
     "GROUP BY category",
     "SORT length(rows) DESC",
@@ -29,7 +29,7 @@ function buildDataviewBlock() {
 
 export async function generateStrengthReport() {
   const config = loadConfig();
-  const stats = aggregateJournal(config.outputDir);
+  const stats = aggregateJournal(config.journalDir);
 
   if (stats.totalCount === 0) {
     logger.info("strength report: no journal entries found");

@@ -4,10 +4,11 @@ import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
 import { parseTranscript, renderTranscriptLog } from "./lib/transcript-parser.js";
 import { correlateGitActivity } from "./lib/git-correlator.js";
-import { loadCategories, recordCategoryUsage } from "./lib/categories-store.js";
 import { generateJournalEntry } from "./lib/claude-cli.js";
 import { saveJournalEntry } from "./lib/journal-store.js";
 import { removeFile } from "./lib/remove-file.js";
+import { findProjectByRepo, loadProjects, recordProject } from "./lib/projects-store.js";
+import { generateProjectIndexes } from "./report/project-index.js";
 
 /**
  * Runs the full journal pipeline for one session: parse -> git correlate ->
@@ -37,20 +38,26 @@ export async function runPipeline({ sessionId, transcriptPath, cwd, previous }) 
     return { status: "skipped", reason: "empty_log" };
   }
 
-  const existingCategories = loadCategories();
+  const projects = loadProjects();
+  // A repo already linked to a project decides it; the model only picks
+  // (or names) a project for sessions outside a known repo.
+  const repoProject = findProjectByRepo(projects, gitActivity?.repoName);
 
   let classification, overview, parts;
   try {
     ({ classification, overview, parts } = generateJournalEntry({
       sessionLog,
       gitActivity,
-      existingCategories,
+      categories: config.categories,
+      projects,
+      repoProject,
       model: config.model,
     }));
   } catch (err) {
     logger.error("journal generation failed", { error: err, sessionId });
     return { status: "error", reason: "generation_failed" };
   }
+  classification.project = repoProject?.name ?? classification.project?.trim() ?? "";
 
   logger.info("classified session", { sessionId, classification });
 
@@ -69,7 +76,7 @@ export async function runPipeline({ sessionId, transcriptPath, cwd, previous }) 
     // title reuses its filename instead of getting a " 2" suffix.
     removePreviousNotes(previous);
     ({ filePath, partFilePaths } = saveJournalEntry({
-      outputDir: config.outputDir,
+      outputDir: config.journalDir,
       classification,
       overview,
       parts,
@@ -82,14 +89,15 @@ export async function runPipeline({ sessionId, transcriptPath, cwd, previous }) 
     return { status: "error", reason: "save_failed" };
   }
 
-  if (previous?.category !== classification.category) {
-    recordCategoryUsage(
-      classification.category,
-      classification.is_new_category ? classification.category_description : undefined,
-    );
+  recordProject(classification.project, { repo: gitActivity?.repoName, description: classification.project_description });
+  try {
+    generateProjectIndexes();
+  } catch (err) {
+    // The note itself is saved; a stale index is fixed by the next run.
+    logger.error("failed to update project indexes", { error: err, sessionId });
   }
 
-  logger.info("journal entry saved", { sessionId, filePath, partFilePaths, category: classification.category });
+  logger.info("journal entry saved", { sessionId, filePath, partFilePaths, category: classification.category, project: classification.project });
   return { status: "saved", filePath, partFilePaths, classification };
 }
 

@@ -80,7 +80,7 @@ function groupByProject(notes) {
 
   const orphans = [];
   for (const note of notes) {
-    const key = repoKeyOf(note.frontmatter);
+    const key = note.frontmatter.project || repoKeyOf(note.frontmatter);
     if (key) add(key, note);
     else orphans.push(note);
   }
@@ -185,7 +185,7 @@ function renderWanted(projects, intro, skills, dateStr) {
  */
 export async function generateResumeExport() {
   const config = loadConfig();
-  const notes = loadJournalNotes(config.outputDir);
+  const notes = loadJournalNotes(config.journalDir);
 
   if (notes.length === 0) {
     logger.info("resume export: no journal entries found");

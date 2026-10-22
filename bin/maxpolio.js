@@ -11,6 +11,9 @@ import { generateStrengthReport } from "../src/report/strength-report.js";
 import { generateResumeExport } from "../src/report/resume-export.js";
 import { generateBlogExport, listBlogPosts } from "../src/report/blog-export.js";
 import { runPipeline } from "../src/pipeline.js";
+import { migrateJournal } from "../src/migrate.js";
+import { generateProjectIndexes } from "../src/report/project-index.js";
+import { generatePortfolioDraft, listPortfolioProjects } from "../src/report/portfolio-export.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -96,7 +99,7 @@ function installHook() {
   const config = loadConfig();
   installSyncTask(config.syncIntervalMinutes);
   console.log(`\n저널이 저장될 위치: ${config.outputDir}`);
-  console.log("Obsidian에서 위 폴더를 vault로 열면 카테고리/태그별로 바로 탐색할 수 있어.");
+  console.log("Obsidian에서 위 폴더를 vault로 열면 journal/(원본), blog/(다듬은 글)를 카테고리별로 볼 수 있어.");
   console.log(
     "\n분류/생성은 이 PC에 로그인된 Claude Code 계정(구독 사용량)으로 처리돼 — 별도 API 키 설정 필요 없음. " +
       "`maxpolio sync`가 백그라운드에서 `claude -p`를 호출하니, 이 계정이 로그아웃 상태면 파이프라인이 실패하고 " +
@@ -127,7 +130,8 @@ async function resume() {
 
 function blog(args) {
   const all = args.includes("--all");
-  const query = args.filter((a) => a !== "--all").join(" ").trim();
+  const force = args.includes("--force");
+  const query = args.filter((a) => a !== "--all" && a !== "--force").join(" ").trim();
 
   if (!all && !query) {
     const posts = listBlogPosts();
@@ -135,27 +139,72 @@ function blog(args) {
       console.log("저널 항목이 아직 없어.");
       return;
     }
-    console.log("블로그 초안으로 뽑을 수 있는 글 (최신순):\n");
+    console.log("블로그 글로 다듬을 수 있는 저널 (최신순, ✓ = 블로그 버전 있음):\n");
     for (const p of posts) {
       const parts = p.partCount > 0 ? ` (+곁가지 ${p.partCount}개 포함)` : "";
-      console.log(`  ${p.date ?? "날짜 없음"}  [${p.category ?? "-"}] ${p.title}${parts}`);
+      console.log(`  ${p.hasBlog ? "✓" : " "} ${p.date ?? "날짜 없음"}  [${p.category ?? "-"}] ${p.title}${parts}`);
     }
-    console.log("\n`maxpolio blog <제목 일부>` 또는 `maxpolio blog --all`로 초안을 만들어.");
+    console.log("\n`maxpolio blog <제목 일부>`로 다듬어. 이미 있는 블로그 버전을 다시 만들려면 --force.");
     return;
   }
 
-  const drafts = generateBlogExport({ query, all });
-  if (drafts.length === 0) {
+  const results = generateBlogExport({ query, all, force, onPost: (title) => console.log(`다듬는 중: ${title}`) });
+  if (results.length === 0) {
     console.log(`"${query}"에 해당하는 저널 글이 없어. \`maxpolio blog\`로 목록을 확인해봐.`);
     process.exitCode = 1;
     return;
   }
-  console.log(`티스토리 초안 ${drafts.length}개 생성 완료:`);
-  for (const d of drafts) {
-    const review = d.findingCount > 0 ? `  ← 확인할 주소/IP/이메일 ${d.findingCount}개` : "";
-    console.log(`  ${d.filePath}${review}`);
+
+  for (const r of results) {
+    if (r.status === "saved") {
+      const review = r.findingCount > 0 ? `  ← 공개 전 확인할 주소/IP/이메일 ${r.findingCount}개 (check_before_publish)` : "";
+      console.log(`  저장: ${r.filePath}${review}`);
+    } else if (r.status === "exists") {
+      console.log(`  건너뜀 (이미 있음, 다시 만들려면 --force): ${r.filePath}`);
+    } else {
+      console.log(`  실패: ${r.title} — ${r.error}`);
+      process.exitCode = 1;
+    }
   }
-  console.log("티스토리 글쓰기에서 에디터를 '마크다운' 모드로 바꾸고 본문을 붙여넣어. 내부 정보는 올리기 전에 직접 확인해줘.");
+  if (results.some((r) => r.status === "saved")) {
+    console.log("\n티스토리 글쓰기에서 에디터를 '마크다운' 모드로 바꾸고 본문(frontmatter 아래)을 붙여넣어. 내부 정보는 올리기 전에 한 번 더 확인해줘.");
+  }
+}
+
+function portfolio(args) {
+  const query = args.join(" ").trim();
+  if (!query) {
+    console.log("포트폴리오 초안을 만들 수 있는 프로젝트:\n");
+    for (const p of listPortfolioProjects()) console.log(`  ${p.name} (저널 ${p.count}개)`);
+    console.log("\n`maxpolio portfolio <프로젝트 이름 일부>`로 초안을 만들어.");
+    return;
+  }
+  console.log(`포트폴리오 초안 만드는 중: ${query}`);
+  const result = generatePortfolioDraft(query);
+  if (!result) {
+    console.log(`"${query}"에 해당하는 프로젝트가 없어. \`maxpolio portfolio\`로 목록을 확인해봐.`);
+    process.exitCode = 1;
+  } else if (result.ambiguous) {
+    console.log(`여러 프로젝트가 걸려: ${result.ambiguous.join(", ")} — 더 구체적으로 적어줘.`);
+    process.exitCode = 1;
+  } else {
+    console.log(`저장: ${result.filePath} (저널 ${result.noteCount}개, 업데이트 후보 ${result.candidateCount}개)`);
+  }
+}
+
+function projects() {
+  const files = generateProjectIndexes();
+  console.log(`프로젝트 인덱스 ${files.length}개 갱신: ${files.join(", ")}`);
+}
+
+function migrate(args) {
+  const apply = args.includes("--apply");
+  const { moves, skipped, removedDirs } = migrateJournal({ apply });
+  console.log(apply ? "이전 완료:\n" : "미리보기 (실제로 옮기려면 --apply):\n");
+  for (const m of moves) console.log(`  [${m.from}] → [${m.to}]  ${m.name}`);
+  for (const s of skipped) console.log(`  건너뜀: ${s.file} (${s.reason})`);
+  if (removedDirs.length > 0) console.log(`\n비워진 옛 폴더 삭제: ${removedDirs.join(", ")}`);
+  console.log(`\n노트 ${moves.length}개${apply ? " 이동" : " 이동 예정"}, ${skipped.length}개 건너뜀.`);
 }
 
 async function testSession(transcriptPath, cwd) {
@@ -181,8 +230,12 @@ function printHelp() {
   maxpolio sync                    종료된 세션 + 한동안 조용한 열린 세션을 저널링 (스케줄러가 호출)
   maxpolio report                  누적 저널로 강점 리포트 생성
   maxpolio resume                  누적 저널로 잡코리아/원티드 이력서 붙여넣기용 초안 생성
-  maxpolio blog                    티스토리 초안으로 뽑을 수 있는 저널 글 목록
-  maxpolio blog <제목 일부>|--all   저널 글을 티스토리 마크다운 모드 붙여넣기용 초안으로 변환
+  maxpolio blog                    블로그 글로 다듬을 수 있는 저널 목록
+  maxpolio blog <제목 일부>|--all [--force]
+                                   저널(원본)을 공개용 블로그 글로 다듬어 blog/<카테고리>/에 저장
+  maxpolio portfolio [프로젝트]     프로젝트 저널로 포트폴리오 섹션 초안 + 업데이트 후보를 portfolio/에 생성
+  maxpolio projects                projects/<프로젝트>.md 인덱스 노트 다시 만들기 (sync 때 자동 갱신됨)
+  maxpolio migrate [--apply]       옛 카테고리 폴더의 노트를 journal/<새 카테고리>/로 이전 (한 번만)
   maxpolio test-session <path> [cwd]  transcript JSONL 하나로 파이프라인 수동 테스트 (동기 실행, 결과 출력)
   maxpolio config                  현재 설정 출력
 `);
@@ -205,6 +258,15 @@ switch (command) {
     break;
   case "blog":
     blog(args);
+    break;
+  case "portfolio":
+    portfolio(args);
+    break;
+  case "projects":
+    projects();
+    break;
+  case "migrate":
+    migrate(args);
     break;
   case "test-session":
     await testSession(args[0], args[1]);

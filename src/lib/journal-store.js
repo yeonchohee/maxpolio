@@ -58,6 +58,7 @@ export function saveJournalEntry({ outputDir, classification, overview, parts, s
 
   const baseFrontmatter = {
     category: classification.category,
+    ...(classification.project ? { project: classification.project } : {}),
     tags: classification.tags,
     tech_stack: classification.tech_stack,
     date: dateStr,
