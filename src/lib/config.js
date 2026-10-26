@@ -25,6 +25,7 @@ const DEFAULT_CONFIG = {
     { name: "AI·LLM", description: "RAG, 임베딩·검색 품질, LLM 연동과 프롬프트, AI 서비스 설계" },
     { name: "개발 생산성", description: "개발 도구·자동화, 워크플로, Git 사용법, 학습 정리" },
     { name: "생각정리", description: "기술 외 이야기: 커리어·이직·면접 고민, 고민 상담, 회고, 일하는 방식에 대한 개인적인 생각" },
+    { name: "일반 지식", description: "개발·커리어와 무관한 정보성 질문: 생활, 금융, 언어·번역, 상식 등" },
   ],
 };
 
