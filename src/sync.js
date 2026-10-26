@@ -6,6 +6,7 @@ import { CLAUDE_PROJECTS_DIR, LOCK_PATH, MAXPOLIO_HOME, QUEUE_DIR } from "./lib/
 import { removeFile } from "./lib/remove-file.js";
 import { loadState, saveState } from "./lib/state-store.js";
 import { runPipeline } from "./pipeline.js";
+import { updateJournalReadme } from "./report/journal-readme.js";
 
 const LOCK_STALE_MS = 60 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
@@ -187,6 +188,13 @@ export async function runSync() {
       attempted = await syncPass(config, state);
       total += attempted;
     } while (attempted > 0);
+    try {
+      // Runs every sync, not only after new notes, so a category change in
+      // config shows up in the README even when nothing was journaled.
+      updateJournalReadme(config);
+    } catch (err) {
+      logger.error("failed to update journal README", { error: err });
+    }
     return { status: "done", attempted: total };
   } finally {
     removeFile(LOCK_PATH);

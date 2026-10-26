@@ -13,6 +13,7 @@ import { generateBlogExport, listBlogPosts } from "../src/report/blog-export.js"
 import { runPipeline } from "../src/pipeline.js";
 import { migrateJournal } from "../src/migrate.js";
 import { generateProjectIndexes } from "../src/report/project-index.js";
+import { updateJournalReadme } from "../src/report/journal-readme.js";
 import { generatePortfolioDraft, listPortfolioProjects } from "../src/report/portfolio-export.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -197,6 +198,11 @@ function projects() {
   console.log(`프로젝트 인덱스 ${files.length}개 갱신: ${files.join(", ")}`);
 }
 
+function readme() {
+  const changed = updateJournalReadme();
+  console.log(changed ? "README 카테고리 표를 갱신했어요." : "README 카테고리 표가 이미 최신이에요 (README나 표시용 주석이 없으면 건너뛰어요).");
+}
+
 function migrate(args) {
   const apply = args.includes("--apply");
   const { moves, skipped, removedDirs } = migrateJournal({ apply });
@@ -235,6 +241,7 @@ function printHelp() {
                                    저널(원본)을 공개용 블로그 글로 다듬어 blog/<카테고리>/에 저장
   maxpolio portfolio [프로젝트]     프로젝트 저널로 포트폴리오 섹션 초안 + 업데이트 후보를 portfolio/에 생성
   maxpolio projects                projects/<프로젝트>.md 인덱스 노트 다시 만들기 (sync 때 자동 갱신됨)
+  maxpolio readme                  저널 폴더 README.md의 카테고리 표를 설정 기준으로 갱신 (sync 때 자동 갱신됨)
   maxpolio migrate [--apply]       옛 카테고리 폴더의 노트를 journal/<새 카테고리>/로 이전 (한 번만)
   maxpolio test-session <path> [cwd]  transcript JSONL 하나로 파이프라인 수동 테스트 (동기 실행, 결과 출력)
   maxpolio config                  현재 설정 출력
@@ -264,6 +271,9 @@ switch (command) {
     break;
   case "projects":
     projects();
+    break;
+  case "readme":
+    readme();
     break;
   case "migrate":
     migrate(args);
